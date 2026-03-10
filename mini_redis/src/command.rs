@@ -21,6 +21,7 @@ pub fn get_command_response(line: &str, store: &Store) -> Value {
         "SET" => cmd_set(req, store),
         "GET" => cmd_get(req, store),
         "DEL" => cmd_del(req, store),
+        "KEYS" => cmd_keys(store),
         _ => serde_json::json!({"status": "error", "message": "unknown command"}),
     }
 }
@@ -61,4 +62,10 @@ fn cmd_del(req: Request, store: &Store) -> Value {
     };
     let count = if store.lock().unwrap().remove(&key).is_some() { 1 } else { 0 };
     serde_json::json!({"status": "ok", "count": count})
+}
+
+fn cmd_keys(store: &Store) -> Value {
+    let store = store.lock().unwrap();
+    let keys: Vec<String> = store.keys().collect();
+    serde_json::json!({"status": "ok", "keys": keys})
 }
