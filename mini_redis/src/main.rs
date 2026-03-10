@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 
 mod commands;
 use commands::get_command_response;
-
-use std::time::{Duration, Instant};
 
 /// A key-value store entry.
 /// Contains the value and an optional expiration time.
@@ -28,20 +27,19 @@ const CLEANUP_INTERVAL_SECS: u64 = 1;
 
 #[tokio::main]
 async fn main() {
-
     init_tracing();
 
     let store: Store = Arc::new(Mutex::new(HashMap::new()));
-
     let listener = TcpListener::bind(ADDR).await.unwrap();
 
     tracing::info!("MiniRedis listening on {}", ADDR);
 
     spawn_cleanup_task(store.clone());
-
-    main_tcp_loop(listener, store).await;
+    accept_loop(listener, store).await;
 }
 
+/// Initializes the logging system with tracing.
+/// Uses RUST_LOG if set, otherwise defaults to "info".
 fn init_tracing() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -51,6 +49,8 @@ fn init_tracing() {
         .init();
 }
 
+/// Spawns a background task that removes expired keys
+/// every `CLEANUP_INTERVAL_SECS` seconds.
 fn spawn_cleanup_task(store: Store) {
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::from_secs(CLEANUP_INTERVAL_SECS));
@@ -63,7 +63,10 @@ fn spawn_cleanup_task(store: Store) {
         }
     });
 }
-async fn main_tcp_loop(listener: TcpListener, store: Store) {
+
+/// Main TCP connection acceptance loop.
+/// Each connection is handled in an independent Tokio task.
+async fn accept_loop(listener: TcpListener, store: Store) {
     loop {
         let (socket, addr) = listener.accept().await.unwrap();
         tracing::info!("New connection: {}", addr);
@@ -74,11 +77,11 @@ async fn main_tcp_loop(listener: TcpListener, store: Store) {
     }
 }
 
-async fn answer_client(socket: tokio::net::TcpStream, store: Store) {
+/// Handles a connected client — reads JSON commands line by line
+/// and sends back JSON responses.
+async fn answer_client(socket: TcpStream, store: Store) {
     let (read_half, mut write_half) = socket.into_split();
-
-    let reader = BufReader::new(read_half);
-    let mut lines = reader.lines();
+    let mut lines = BufReader::new(read_half).lines();
 
     while let Ok(Some(line)) = lines.next_line().await {
         let response = get_command_response(&line, &store);
