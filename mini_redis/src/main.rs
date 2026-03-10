@@ -3,8 +3,8 @@ use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 
-mod command; 
-use command::get_command_response;
+mod commands;
+use commands::get_command_response;
 
 use std::time::{Duration, Instant};
 
@@ -13,7 +13,7 @@ pub struct Entry {
     pub value: String,
     pub expires_at: Option<Instant>,
 }
-  
+
 type Store = Arc<Mutex<HashMap<String, Entry>>>;
 
 #[tokio::main]
@@ -45,11 +45,9 @@ async fn main() {
         loop {
             interval.tick().await;
             let mut store = store_cleanup.lock().unwrap();
-            store.retain(|_, entry| {
-                match entry.expires_at {
-                    Some(expires_at) => expires_at > Instant::now(),
-                    None => true,
-                }
+            store.retain(|_, entry| match entry.expires_at {
+                Some(expires_at) => expires_at > Instant::now(),
+                None => true,
             });
         }
     });
@@ -79,4 +77,3 @@ async fn answer_client(socket: tokio::net::TcpStream, store: Store) {
         }
     }
 }
-
