@@ -1,3 +1,12 @@
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use tokio::net::TcpListener;
+
+
+type Store = Arc<Mutex<HashMap<String, String>>>;
+
+
+
 #[tokio::main]
 async fn main() {
     // Initialiser tracing
@@ -12,10 +21,20 @@ async fn main() {
     //
     // Étapes suggérées :
     // 1. Créer le store partagé (Arc<Mutex<HashMap<String, ...>>>)
+    let store: Store = Arc::new(Mutex::new(HashMap::new()));
     // 2. Bind un TcpListener sur 127.0.0.1:7878
+    let listener = TcpListener::bind("127.0.0.1:7878").await.unwrap();
     // 3. Accept loop : pour chaque connexion, spawn une tâche
     // 4. Dans chaque tâche : lire les requêtes JSON ligne par ligne,
     //    traiter la commande, envoyer la réponse JSON + '\n'
 
-    println!("MiniRedis - à implémenter !");
+    
+    tracing::info!("MiniRedis listening on 127.0.0.1:7878");
+
+    loop {
+        let (socket, addr) = listener.accept().await.unwrap();
+        tracing::info!("New connection: {}", addr);
+        let store = store.clone();
+
+    }
 }
