@@ -8,50 +8,62 @@ use commands::get_command_response;
 
 use std::time::{Duration, Instant};
 
+/// A key-value store entry.
+/// Contains the value and an optional expiration time.
 #[derive(Clone)]
 pub struct Entry {
     pub value: String,
     pub expires_at: Option<Instant>,
 }
 
-type Store = Arc<Mutex<HashMap<String, Entry>>>;
+/// Shared store between all Tokio tasks.
+/// Arc allows sharing, Mutex protects concurrent access.
+pub type Store = Arc<Mutex<HashMap<String, Entry>>>;
+
+/// Server listening address
+const ADDR: &str = "127.0.0.1:7878";
+
+/// Cleanup interval for expired keys (in seconds)
+const CLEANUP_INTERVAL_SECS: u64 = 1;
 
 #[tokio::main]
 async fn main() {
-    // Initialiser tracing
+
+    init_tracing();
+
+    let store: Store = Arc::new(Mutex::new(HashMap::new()));
+
+    let listener = TcpListener::bind(ADDR).await.unwrap();
+
+    tracing::info!("MiniRedis listening on {}", ADDR);
+
+    spawn_cleanup_task(store.clone());
+
+    main_tcp_loop(listener, store).await;
+}
+
+fn init_tracing() {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
+}
 
-    // TODO: Implémenter le serveur MiniRedis sur 127.0.0.1:7878
-    //
-    // Étapes suggérées :
-    // 1. Créer le store partagé (Arc<Mutex<HashMap<String, ...>>>)
-    let store: Store = Arc::new(Mutex::new(HashMap::new()));
-    // 2. Bind un TcpListener sur 127.0.0.1:7878
-    let listener = TcpListener::bind("127.0.0.1:7878").await.unwrap();
-    // 3. Accept loop : pour chaque connexion, spawn une tâche
-    // 4. Dans chaque tâche : lire les requêtes JSON ligne par ligne,
-    //    traiter la commande, envoyer la réponse JSON + '\n'
-
-    tracing::info!("MiniRedis listening on 127.0.0.1:7878");
-
-    let store_cleanup = store.clone();
+fn spawn_cleanup_task(store: Store) {
     tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(1));
+        let mut interval = tokio::time::interval(Duration::from_secs(CLEANUP_INTERVAL_SECS));
         loop {
             interval.tick().await;
-            let mut store = store_cleanup.lock().unwrap();
-            store.retain(|_, entry| match entry.expires_at {
+            store.lock().unwrap().retain(|_, entry| match entry.expires_at {
                 Some(expires_at) => expires_at > Instant::now(),
                 None => true,
             });
         }
     });
-
+}
+async fn main_tcp_loop(listener: TcpListener, store: Store) {
     loop {
         let (socket, addr) = listener.accept().await.unwrap();
         tracing::info!("New connection: {}", addr);
