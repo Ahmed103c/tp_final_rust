@@ -88,7 +88,7 @@ fn get_command_response(line: &str, store: &Store) -> Value {
             store.insert(key, value);
             serde_json::json!({"status": "ok"})
         },
-        
+
         "GET" => {
             let key = match req.key {
                 Some(k) => k,
@@ -97,6 +97,16 @@ fn get_command_response(line: &str, store: &Store) -> Value {
             let store = store.lock().unwrap();
             let value = store.get(&key).cloned();
             serde_json::json!({"status": "ok", "value": value})
+        },
+        
+        "DEL" => {
+            let key = match req.key {
+                Some(k) => k,
+                None => return serde_json::json!({"status": "error", "message": "missing key"}),
+            };
+            let mut store = store.lock().unwrap();
+            let count = if store.remove(&key).is_some() { 1 } else { 0 };
+            serde_json::json!({"status": "ok", "count": count})
         },
         _ => serde_json::json!({"status": "error", "message": "unknown command"}),
     }
