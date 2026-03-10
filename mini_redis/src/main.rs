@@ -2,17 +2,11 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
+mod command; 
+use command::get_command_response;
+  
 type Store = Arc<Mutex<HashMap<String, String>>>;
-
-#[derive(Deserialize)]
-struct Request {
-    cmd: String,
-    key: Option<String>,
-    value: Option<String>,
-}
 
 #[tokio::main]
 async fn main() {
@@ -35,7 +29,6 @@ async fn main() {
     // 4. Dans chaque tâche : lire les requêtes JSON ligne par ligne,
     //    traiter la commande, envoyer la réponse JSON + '\n'
 
-    
     tracing::info!("MiniRedis listening on 127.0.0.1:7878");
 
     loop {
@@ -49,7 +42,6 @@ async fn main() {
 }
 
 async fn answer_client(socket: tokio::net::TcpStream, store: Store) {
-
     let (read_half, mut write_half) = socket.into_split();
 
     let reader = BufReader::new(read_half);
@@ -65,49 +57,3 @@ async fn answer_client(socket: tokio::net::TcpStream, store: Store) {
     }
 }
 
-
-fn get_command_response(line: &str, store: &Store) -> Value {
-    let req: Request = match serde_json::from_str(line) {
-        Ok(r) => r,
-        Err(_) => return serde_json::json!({"status": "error", "message": "invalid json"}),
-    };
-
-    match req.cmd.as_str() {
-        "PING" => serde_json::json!({"status": "ok"}),
-
-        "SET" => {
-            let key = match req.key {
-                Some(k) => k,
-                None => return serde_json::json!({"status": "error", "message": "missing key"}),
-            };
-            let value = match req.value {
-                Some(v) => v,
-                None => return serde_json::json!({"status": "error", "message": "missing value"}),
-            };
-            let mut store = store.lock().unwrap();
-            store.insert(key, value);
-            serde_json::json!({"status": "ok"})
-        },
-
-        "GET" => {
-            let key = match req.key {
-                Some(k) => k,
-                None => return serde_json::json!({"status": "error", "message": "missing key"}),
-            };
-            let store = store.lock().unwrap();
-            let value = store.get(&key).cloned();
-            serde_json::json!({"status": "ok", "value": value})
-        },
-        
-        "DEL" => {
-            let key = match req.key {
-                Some(k) => k,
-                None => return serde_json::json!({"status": "error", "message": "missing key"}),
-            };
-            let mut store = store.lock().unwrap();
-            let count = if store.remove(&key).is_some() { 1 } else { 0 };
-            serde_json::json!({"status": "ok", "count": count})
-        },
-        _ => serde_json::json!({"status": "error", "message": "unknown command"}),
-    }
-}
