@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -35,6 +36,7 @@ pub fn get_command_response(line: &str, store: &Store) -> Value {
         "TTL" => ttl_function(req, store),
         "INCR" => incr_decr_function(req, store, Operation::Incr),
         "DECR" => incr_decr_function(req, store, Operation::Decr),
+        "SAVE" => save_function(store),
         _ => serde_json::json!({"status": "error", "message": "unknown command"}),
     }
 }
@@ -160,4 +162,20 @@ fn incr_decr_function(req: Request, store: &Store, op: Operation) -> Value {
     };
 
     serde_json::json!({"status": "ok", "value": new_value})
+}
+
+fn save_function(store: &Store) -> Value {
+    let store = store.lock().unwrap();
+    let map: HashMap<String, String> = store
+        .iter()
+        .map(|(k, v)| (k.clone(), v.value.clone()))
+        .collect();
+
+    match serde_json::to_string(&map) {
+        Err(_) => serde_json::json!({"status": "error", "message": "failed to serialize"}),
+        Ok(json) => match std::fs::write("dump.json", json) {
+            Err(_) => serde_json::json!({"status": "error", "message": "failed to write file"}),
+            Ok(_) => serde_json::json!({"status": "ok"}),
+        }
+    }
 }
