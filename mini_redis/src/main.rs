@@ -5,8 +5,16 @@ use tokio::net::TcpListener;
 
 mod command; 
 use command::get_command_response;
+
+use std::time::Instant;
+
+#[derive(Clone)]
+pub struct Entry {
+    pub value: String,
+    pub expires_at: Option<Instant>,
+}
   
-type Store = Arc<Mutex<HashMap<String, String>>>;
+type Store = Arc<Mutex<HashMap<String, Entry>>>;
 
 #[tokio::main]
 async fn main() {

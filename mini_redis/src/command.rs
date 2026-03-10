@@ -1,4 +1,5 @@
 use crate::Store;
+use crate::Entry;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -40,7 +41,7 @@ fn cmd_set(req: Request, store: &Store) -> Value {
         Some(v) => v,
         None => return serde_json::json!({"status": "error", "message": "missing value"}),
     };
-    store.lock().unwrap().insert(key, value);
+    store.lock().unwrap().insert(key, Entry { value, expires_at: None });
     serde_json::json!({"status": "ok"})
 }
 
@@ -49,7 +50,7 @@ fn cmd_get(req: Request, store: &Store) -> Value {
         Ok(k) => k,
         Err(e) => return e,
     };
-    let value = store.lock().unwrap().get(&key).cloned();
+    let value = store.lock().unwrap().get(&key).map(|e| e.value.clone());
     serde_json::json!({"status": "ok", "value": value})
 }
 
