@@ -66,6 +66,6 @@ fn cmd_del(req: Request, store: &Store) -> Value {
 
 fn cmd_keys(store: &Store) -> Value {
     let store = store.lock().unwrap();
-    let keys: Vec<String> = store.keys().collect();
+    let keys: Vec<String> = store.keys().cloned().collect();
     serde_json::json!({"status": "ok", "keys": keys})
 }
