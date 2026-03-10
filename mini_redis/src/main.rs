@@ -1,11 +1,18 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
-
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 type Store = Arc<Mutex<HashMap<String, String>>>;
 
-
+#[derive(Deserialize)]
+struct Request {
+    cmd: String,
+    key: Option<String>,
+    value: Option<String>,
+}
 
 #[tokio::main]
 async fn main() {
@@ -35,6 +42,38 @@ async fn main() {
         let (socket, addr) = listener.accept().await.unwrap();
         tracing::info!("New connection: {}", addr);
         let store = store.clone();
+        tokio::spawn(async move {
+            answer_client(socket, store).await;
+        });
+    }
+}
 
+async fn answer_client(socket: tokio::net::TcpStream, store: Store) {
+
+    let (read_half, mut write_half) = socket.into_split();
+
+    let reader = BufReader::new(read_half);
+    let mut lines = reader.lines();
+
+    while let Ok(Some(line)) = lines.next_line().await {
+        let response = get_command_response(&line, &store);
+        let mut response_str = serde_json::to_string(&response).unwrap();
+        response_str.push('\n');
+        if write_half.write_all(response_str.as_bytes()).await.is_err() {
+            break;
+        }
+    }
+}
+
+
+fn get_command_response(line: &str, store: &Store) -> Value {
+    let req: Request = match serde_json::from_str(line) {
+        Ok(r) => r,
+        Err(_) => return serde_json::json!({"status": "error", "message": "invalid json"}),
+    };
+
+    match req.cmd.as_str() {
+        "PING" => serde_json::json!({"status": "ok"}),
+        _ => serde_json::json!({"status": "error", "message": "unknown command"}),
     }
 }
