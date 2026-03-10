@@ -6,7 +6,7 @@ use tokio::net::TcpListener;
 mod command; 
 use command::get_command_response;
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 #[derive(Clone)]
 pub struct Entry {
@@ -38,6 +38,21 @@ async fn main() {
     //    traiter la commande, envoyer la réponse JSON + '\n'
 
     tracing::info!("MiniRedis listening on 127.0.0.1:7878");
+
+    let store_cleanup = store.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(1));
+        loop {
+            interval.tick().await;
+            let mut store = store_cleanup.lock().unwrap();
+            store.retain(|_, entry| {
+                match entry.expires_at {
+                    Some(expires_at) => expires_at > Instant::now(),
+                    None => true,
+                }
+            });
+        }
+    });
 
     loop {
         let (socket, addr) = listener.accept().await.unwrap();
