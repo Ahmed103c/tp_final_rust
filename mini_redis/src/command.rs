@@ -22,11 +22,12 @@ pub fn get_command_response(line: &str, store: &Store) -> Value {
 
     match req.cmd.as_str() {
         "PING" => serde_json::json!({"status": "ok"}),
-        "SET" => cmd_set(req, store),
-        "GET" => cmd_get(req, store),
-        "DEL" => cmd_del(req, store),
-        "KEYS" => cmd_keys(store),
-        "EXPIRE" => cmd_expire(req, store), 
+        "SET" => set_function(req, store),
+        "GET" => get_function(req, store),
+        "DEL" => del_function(req, store),
+        "KEYS" => keys_function(store),
+        "EXPIRE" => expire_function(req, store),
+        "TTL" => ttl_function(req, store), 
         _ => serde_json::json!({"status": "error", "message": "unknown command"}),
     }
 }
@@ -46,7 +47,7 @@ fn require_seconds(req: &Request) -> Result<u64, Value> {
 }
 
 
-fn cmd_set(req: Request, store: &Store) -> Value {
+fn set_function(req: Request, store: &Store) -> Value {
     let key = match require_key(&req) {
         Ok(k) => k,
         Err(e) => return e,
@@ -59,7 +60,7 @@ fn cmd_set(req: Request, store: &Store) -> Value {
     serde_json::json!({"status": "ok"})
 }
 
-fn cmd_get(req: Request, store: &Store) -> Value {
+fn get_function(req: Request, store: &Store) -> Value {
     let key = match require_key(&req) {
         Ok(k) => k,
         Err(e) => return e,
@@ -68,7 +69,7 @@ fn cmd_get(req: Request, store: &Store) -> Value {
     serde_json::json!({"status": "ok", "value": value})
 }
 
-fn cmd_del(req: Request, store: &Store) -> Value {
+fn del_function(req: Request, store: &Store) -> Value {
     let key = match require_key(&req) {
         Ok(k) => k,
         Err(e) => return e,
@@ -77,13 +78,13 @@ fn cmd_del(req: Request, store: &Store) -> Value {
     serde_json::json!({"status": "ok", "count": count})
 }
 
-fn cmd_keys(store: &Store) -> Value {
+fn keys_function(store: &Store) -> Value {
     let store = store.lock().unwrap();
     let keys: Vec<String> = store.keys().cloned().collect();
     serde_json::json!({"status": "ok", "keys": keys})
 }
 
-fn cmd_expire(req: Request, store: &Store) -> Value {
+fn expire_function(req: Request, store: &Store) -> Value {
     let key = match require_key(&req) {
         Ok(k) => k,
         Err(e) => return e,
@@ -98,5 +99,23 @@ fn cmd_expire(req: Request, store: &Store) -> Value {
         serde_json::json!({"status": "ok"})
     } else {
         serde_json::json!({"status": "error", "message": "key not found"})
+    }
+}
+
+fn ttl_function(req: Request, store: &Store) -> Value {
+    let key = match require_key(&req) {
+        Ok(k) => k,
+        Err(e) => return e,
+    };
+    let store = store.lock().unwrap();
+    match store.get(&key) {
+        None => serde_json::json!({"status": "ok", "ttl": -2}),
+        Some(entry) => match entry.expires_at {
+            None => serde_json::json!({"status": "ok", "ttl": -1}),
+            Some(expires_at) => {
+                let ttl = expires_at.duration_since(Instant::now()).as_secs();
+                serde_json::json!({"status": "ok", "ttl": ttl})
+            }
+        }
     }
 }
