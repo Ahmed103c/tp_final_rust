@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Check formatting
+        run: cargo fmt --check
+        working-directory: mini_redis
+
+      - name: Clippy
+        run: cargo clippy -- -D warnings
+        working-directory: mini_redis
+
+      - name: Build
+        run: cargo build
+        working-directory: mini_redis
+
+      - name: Start server
+        run: cargo run &
+        working-directory: mini_redis
+
+      - name: Wait for server
+        run: sleep 2
+
+      - name: Run tests
+        run: cargo test
+        working-directory: mini_redis
