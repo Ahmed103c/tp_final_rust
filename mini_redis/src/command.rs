@@ -1,3 +1,6 @@
+use std::time::Duration;
+use std::time::Instant;
+
 use crate::Store;
 use crate::Entry;
 use serde::Deserialize;
@@ -8,6 +11,7 @@ pub struct Request {
     pub cmd: String,
     pub key: Option<String>,
     pub value: Option<String>,
+    pub seconds: Option<u64>
 }
 
 pub fn get_command_response(line: &str, store: &Store) -> Value {
@@ -22,6 +26,7 @@ pub fn get_command_response(line: &str, store: &Store) -> Value {
         "GET" => cmd_get(req, store),
         "DEL" => cmd_del(req, store),
         "KEYS" => cmd_keys(store),
+        "EXPIRE" => cmd_expire(req, store), 
         _ => serde_json::json!({"status": "error", "message": "unknown command"}),
     }
 }
@@ -32,6 +37,14 @@ fn require_key(req: &Request) -> Result<String, Value> {
         None => Err(serde_json::json!({"status": "error", "message": "missing key"})),
     }
 }
+
+fn require_seconds(req: &Request) -> Result<u64, Value> {
+    match req.seconds {
+        Some(s) => Ok(s),
+        None => Err(serde_json::json!({"status": "error", "message": "missing seconds"})),
+    }
+}
+
 
 fn cmd_set(req: Request, store: &Store) -> Value {
     let key = match require_key(&req) {
@@ -68,4 +81,22 @@ fn cmd_keys(store: &Store) -> Value {
     let store = store.lock().unwrap();
     let keys: Vec<String> = store.keys().cloned().collect();
     serde_json::json!({"status": "ok", "keys": keys})
+}
+
+fn cmd_expire(req: Request, store: &Store) -> Value {
+    let key = match require_key(&req) {
+        Ok(k) => k,
+        Err(e) => return e,
+    };
+    let seconds = match require_seconds(&req){
+        Ok(s) => s,
+        Err(e) => return e,
+    };
+    let mut store = store.lock().unwrap();
+    if let Some(entry) = store.get_mut(&key) {
+        entry.expires_at = Some(Instant::now() + Duration::from_secs(seconds));
+        serde_json::json!({"status": "ok"})
+    } else {
+        serde_json::json!({"status": "error", "message": "key not found"})
+    }
 }
