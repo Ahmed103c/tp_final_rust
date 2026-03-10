@@ -20,7 +20,7 @@ pub struct Entry {
 pub type Store = Arc<Mutex<HashMap<String, Entry>>>;
 
 /// Server listening address
-const ADDR: &str = "127.0.0.1:7878";
+const SERVER_ADDRESS: &str = "127.0.0.1:7878";
 
 /// Cleanup interval for expired keys (in seconds)
 const CLEANUP_INTERVAL_SECS: u64 = 1;
@@ -30,9 +30,9 @@ async fn main() {
     init_tracing();
 
     let store: Store = Arc::new(Mutex::new(HashMap::new()));
-    let listener = TcpListener::bind(ADDR).await.unwrap();
+    let listener = TcpListener::bind(SERVER_ADDRESS).await.unwrap();
 
-    tracing::info!("MiniRedis listening on {}", ADDR);
+    tracing::info!("MiniRedis listening on {}", SERVER_ADDRESS);
 
     spawn_cleanup_task(store.clone());
     accept_loop(listener, store).await;
