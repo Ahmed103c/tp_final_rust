@@ -3,11 +3,15 @@ use crate::commands::Request;
 use crate::{Entry, Store};
 use serde_json::Value;
 
+/// Represents the operation to perform on a numeric value.
 pub enum Operation {
     Incr,
     Decr,
 }
 
+/// Increments or decrements the integer value associated with a key.
+/// If the key does not exist, it is created with 1 (Incr) or -1 (Decr).
+/// Returns an error if the value is not a valid integer.
 pub fn incr_decr_function(req: Request, store: &Store, op: Operation) -> Value {
     let key = match require_key(&req) {
         Ok(k) => k,

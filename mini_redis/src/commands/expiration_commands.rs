@@ -4,12 +4,17 @@ use crate::Store;
 use serde_json::Value;
 use std::time::{Duration, Instant};
 
+/// Returns all keys currently present in the store.
+/// Order is not guaranteed.
 pub fn keys_function(store: &Store) -> Value {
     let store = store.lock().unwrap();
     let keys: Vec<String> = store.keys().cloned().collect();
     serde_json::json!({"status": "ok", "keys": keys})
 }
 
+/// Associates an expiration time (in seconds) with an existing key.
+/// Once the delay has elapsed, the key will be automatically removed.
+/// Returns an error if the key does not exist.
 pub fn expire_function(req: Request, store: &Store) -> Value {
     let key = match require_key(&req) {
         Ok(k) => k,
@@ -28,6 +33,10 @@ pub fn expire_function(req: Request, store: &Store) -> Value {
     }
 }
 
+/// Returns the remaining time to live of a key in seconds.
+/// - Positive integer : seconds remaining before expiration
+/// - `-1` : key exists but has no expiration
+/// - `-2` : key does not exist
 pub fn ttl_function(req: Request, store: &Store) -> Value {
     let key = match require_key(&req) {
         Ok(k) => k,
