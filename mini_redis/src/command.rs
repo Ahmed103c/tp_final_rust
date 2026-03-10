@@ -14,6 +14,11 @@ pub struct Request {
     pub seconds: Option<u64>
 }
 
+enum Operation {
+    Incr,
+    Decr,
+}
+
 pub fn get_command_response(line: &str, store: &Store) -> Value {
     let req: Request = match serde_json::from_str(line) {
         Ok(r) => r,
@@ -28,8 +33,8 @@ pub fn get_command_response(line: &str, store: &Store) -> Value {
         "KEYS" => keys_function(store),
         "EXPIRE" => expire_function(req, store),
         "TTL" => ttl_function(req, store),
-        "INCR" => incr_function(req, store),
-        "DECR" => decr_function(req, store),
+        "INCR" => incr_decr_function(req, store, Operation::Incr),
+        "DECR" => incr_decr_function(req, store, Operation::Decr),
         _ => serde_json::json!({"status": "error", "message": "unknown command"}),
     }
 }
@@ -122,7 +127,7 @@ fn ttl_function(req: Request, store: &Store) -> Value {
     }
 }
 
-fn incr_function(req: Request, store: &Store) -> Value {
+fn incr_decr_function(req: Request, store: &Store, op: Operation) -> Value {
     let key = match require_key(&req) {
         Ok(k) => k,
         Err(e) => return e,
@@ -132,53 +137,27 @@ fn incr_function(req: Request, store: &Store) -> Value {
     
     let new_value = match store.get_mut(&key) {
         None => {
-            // clé n'existe pas → on crée avec 1
-            store.insert(key, Entry { value: "1".to_string(), expires_at: None });
-            1
+            let initial = match op {
+                Operation::Incr => 1,
+                Operation::Decr => -1,
+            };
+            store.insert(key, Entry { value: initial.to_string(), expires_at: None });
+            initial
         },
         Some(entry) => {
-            // clé existe → on parse
             match entry.value.parse::<i64>() {
                 Err(_) => return serde_json::json!({"status": "error", "message": "not an integer"}),
                 Ok(n) => {
-                    entry.value = (n + 1).to_string();
-                    n + 1
+                    let new_val = match op {
+                        Operation::Incr => n + 1,
+                        Operation::Decr => n - 1,
+                    };
+                    entry.value = new_val.to_string();
+                    new_val
                 }
             }
         }
     };
 
     serde_json::json!({"status": "ok", "value": new_value})
-
-}
-
-
-fn decr_function(req: Request, store: &Store) -> Value {
-    let key = match require_key(&req) {
-        Ok(k) => k,
-        Err(e) => return e,
-    };
-
-    let mut store = store.lock().unwrap();
-    
-    let new_value = match store.get_mut(&key) {
-        None => {
-            // clé n'existe pas → on crée avec 1
-            store.insert(key, Entry { value: "0".to_string(), expires_at: None });
-            1
-        },
-        Some(entry) => {
-            // clé existe → on parse
-            match entry.value.parse::<i64>() {
-                Err(_) => return serde_json::json!({"status": "error", "message": "not an integer"}),
-                Ok(n) => {
-                    entry.value = (n + 1).to_string();
-                    n -1 
-                }
-            }
-        }
-    };
-
-    serde_json::json!({"status": "ok", "value": new_value})
-
 }
