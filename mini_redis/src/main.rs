@@ -74,6 +74,30 @@ fn get_command_response(line: &str, store: &Store) -> Value {
 
     match req.cmd.as_str() {
         "PING" => serde_json::json!({"status": "ok"}),
+
+        "SET" => {
+            let key = match req.key {
+                Some(k) => k,
+                None => return serde_json::json!({"status": "error", "message": "missing key"}),
+            };
+            let value = match req.value {
+                Some(v) => v,
+                None => return serde_json::json!({"status": "error", "message": "missing value"}),
+            };
+            let mut store = store.lock().unwrap();
+            store.insert(key, value);
+            serde_json::json!({"status": "ok"})
+        },
+        
+        "GET" => {
+            let key = match req.key {
+                Some(k) => k,
+                None => return serde_json::json!({"status": "error", "message": "missing key"}),
+            };
+            let store = store.lock().unwrap();
+            let value = store.get(&key).cloned();
+            serde_json::json!({"status": "ok", "value": value})
+        },
         _ => serde_json::json!({"status": "error", "message": "unknown command"}),
     }
 }
