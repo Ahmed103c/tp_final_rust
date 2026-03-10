@@ -27,7 +27,8 @@ pub fn get_command_response(line: &str, store: &Store) -> Value {
         "DEL" => del_function(req, store),
         "KEYS" => keys_function(store),
         "EXPIRE" => expire_function(req, store),
-        "TTL" => ttl_function(req, store), 
+        "TTL" => ttl_function(req, store),
+        "INCR" => incr_function(req, store),
         _ => serde_json::json!({"status": "error", "message": "unknown command"}),
     }
 }
@@ -118,4 +119,34 @@ fn ttl_function(req: Request, store: &Store) -> Value {
             }
         }
     }
+}
+
+fn incr_function(req: Request, store: &Store) -> Value {
+    let key = match require_key(&req) {
+        Ok(k) => k,
+        Err(e) => return e,
+    };
+
+    let mut store = store.lock().unwrap();
+    
+    let new_value = match store.get_mut(&key) {
+        None => {
+            // clé n'existe pas → on crée avec 1
+            store.insert(key, Entry { value: "1".to_string(), expires_at: None });
+            1
+        },
+        Some(entry) => {
+            // clé existe → on parse
+            match entry.value.parse::<i64>() {
+                Err(_) => return serde_json::json!({"status": "error", "message": "not an integer"}),
+                Ok(n) => {
+                    entry.value = (n + 1).to_string();
+                    n + 1
+                }
+            }
+        }
+    };
+
+    serde_json::json!({"status": "ok", "value": new_value})
+
 }
